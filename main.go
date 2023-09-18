@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"time"
 )
 
 // Define a struct that matches the JSON structure
@@ -43,7 +44,17 @@ func main() {
 		fmt.Printf("Extended: %s\n", bookmark.Extended)
 		fmt.Printf("Meta: %s\n", bookmark.Meta)
 		fmt.Printf("Hash: %s\n", bookmark.Hash)
-		fmt.Printf("Time: %s\n", bookmark.Time)
+
+		// Parse the time string into a time.Time object
+		t, err := time.Parse(time.RFC3339, bookmark.Time)
+		if err != nil {
+			fmt.Println("Error parsing time:", err)
+		} else {
+			// Print the time as a formatted string or epoch timestamp
+			fmt.Printf("Time (Formatted): %s\n", t.Format("2006-01-02 15:04:05"))
+			fmt.Printf("Time (Epoch): %d\n", t.Unix())
+		}
+
 		fmt.Printf("Shared: %s\n", bookmark.Shared)
 		fmt.Printf("ToRead: %s\n", bookmark.ToRead)
 		fmt.Printf("Tags: %s\n", bookmark.Tags)
