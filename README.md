@@ -1,7 +1,7 @@
 
 # Go Pinboard Bookmarks Project
 
-The Go Pinboard Bookmarks Project is a simple Go application that reads https://pinboard.in/export/format:json/ JSON data, processes it, and upserts the data into an SQLite database using GORM. This project works therefore with JSON, time parsing, GORM for database interactions, and upsert operations.
+This Go Pinboard Bookmarks Project is a simple Go application that reads https://pinboard.in/export/format:json/ JSON data, processes it, and upserts the data into an SQLite database using GORM. This project works therefore with JSON, time parsing, GORM for database interactions, and upsert operations.
 
 ## Table of Contents
 
