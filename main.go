@@ -5,6 +5,10 @@ import (
 	"fmt"
 	"os"
 	"time"
+
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // Define a struct that matches the JSON structure
@@ -26,7 +30,7 @@ type ConvertedBookmark struct {
 	Description string    `json:"description"`
 	Extended    string    `json:"extended"`
 	Meta        string    `json:"meta"`
-	Hash        string    `json:"hash"`
+	Hash        string    `json:"hash" gorm:"unique"`
 	Time        time.Time `json:"time"`
 	Shared      string    `json:"shared"`
 	ToRead      string    `json:"toread"`
@@ -34,6 +38,16 @@ type ConvertedBookmark struct {
 }
 
 func main() {
+	// Open an SQLite database
+	db, err := gorm.Open(sqlite.Open("bookmarks.db"), &gorm.Config{})
+	if err != nil {
+		fmt.Println("Error opening database:", err)
+		return
+	}
+
+	// Migrate the schema
+	db.AutoMigrate(&ConvertedBookmark{})
+
 	// Read the JSON file
 	data, err := os.ReadFile("bookmarks.json")
 	if err != nil {
@@ -50,10 +64,7 @@ func main() {
 		return
 	}
 
-	// Create a slice to hold the converted bookmarks
-	var convertedBookmarks []ConvertedBookmark
-
-	// Convert the original bookmarks to converted bookmarks
+	// Iterate over the original bookmarks and convert them
 	for _, bookmark := range originalBookmarks {
 		// Parse the time string into a time.Time object
 		t, err := time.Parse(time.RFC3339, bookmark.Time)
@@ -75,20 +86,25 @@ func main() {
 			Tags:        bookmark.Tags,
 		}
 
-		// Append the converted bookmark to the slice
-		convertedBookmarks = append(convertedBookmarks, convertedBookmark)
+		// Perform upsert operation
+		if err := db.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "hash"}},
+			UpdateAll: true,
+		}).Create(&convertedBookmark).Error; err != nil {
+			fmt.Println("Error upserting bookmark:", err)
+		}
 	}
 
-	// Now you can work with the convertedBookmarks slice, where the Time field is of type time.Time
+	// Now, you have the data upserted in the "bookmarks.db" SQLite database
 
 	// Iterate over the converted bookmarks and print their contents
-	for _, bookmark := range convertedBookmarks {
+	for _, bookmark := range originalBookmarks {
 		fmt.Printf("Href: %s\n", bookmark.Href)
 		fmt.Printf("Description: %s\n", bookmark.Description)
 		fmt.Printf("Extended: %s\n", bookmark.Extended)
 		fmt.Printf("Meta: %s\n", bookmark.Meta)
 		fmt.Printf("Hash: %s\n", bookmark.Hash)
-		fmt.Printf("Time (Formatted): %s\n", bookmark.Time.Format("2006-01-02 15:04:05"))
+		fmt.Printf("Time: %s\n", bookmark.Time)
 		fmt.Printf("Shared: %s\n", bookmark.Shared)
 		fmt.Printf("ToRead: %s\n", bookmark.ToRead)
 		fmt.Printf("Tags: %s\n", bookmark.Tags)
