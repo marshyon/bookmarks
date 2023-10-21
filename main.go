@@ -2,14 +2,25 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
+
+var bookmarks []ConvertedBookmark
+
+type Bookmark struct {
+	Href        string `json:"href"`
+	Description string `json:"description"`
+	Tags        string `json:"tags"`
+	Time        string `json:"time"`
+}
 
 // Define a struct that matches the JSON structure
 type OriginalBookmark struct {
@@ -137,48 +148,84 @@ func printConvertedBookmarks(convertedBookmarks []ConvertedBookmark) {
 	}
 }
 
+func printBookmarks(bookmarks []ConvertedBookmark) {
+	for _, bookmark := range bookmarks {
+		fmt.Printf("URL: %s\n", bookmark.Href)
+		fmt.Printf("Desc: %s\n", bookmark.Description)
+		fmt.Printf("Extended: %s\n", bookmark.Extended)
+		fmt.Printf("Tags: %s\n", bookmark.Tags)
+		fmt.Printf("Hash: %s\n", bookmark.Hash)
+
+		dateString := bookmark.Time.Format("2006-01-02")
+
+		fmt.Printf("Date: %s\n", dateString)
+		fmt.Println("---------------------------------------------")
+	}
+}
+
 func main() {
 
-	// read command line arguments and check to see if verbose is set
-	// if verbose is set then print out the converted bookmarks
-	verbose := false
-	if len(os.Args) > 1 {
-		if os.Args[1] == "-v" {
-			verbose = true
-		}
-	}
+	// define command line flags
+	upsertFlag := flag.Bool("upsert", false, "whether to upsert bookmarks")
+	queryFlag := flag.String("query", "", "comma-separated values to query bookmarks")
+	verboseFlag := flag.Bool("verbose", false, "whether to print bookmarks")
+
+	// parse command line flags
+	flag.Parse()
 
 	db, err := initDB()
 	if err != nil {
 		fmt.Println("Error opening database:", err)
 		return
 	}
-	// defer db.Close()
+	//  defer db.Close()
 
-	db.AutoMigrate(&ConvertedBookmark{})
+	if *queryFlag != "" {
+		// get the query values
+		queryValues := strings.Split(*queryFlag, ",")
 
-	data, err := readJSONFile()
-	if err != nil {
-		fmt.Println("Error reading file:", err)
-		return
+		fmt.Printf("Querying bookmarks...[%#v]", queryValues)
+
+		// iterate over queryValues and query the database for bookmarks that match the query values
+		for _, queryValue := range queryValues {
+
+			// query the database for bookmarks that match the query values
+			// db.Where("tags LIKE ?", "%"+queryValue+"%").Find(&bookmarks)
+			db.Where("tags LIKE ?", "%"+queryValue+"%").Order("time ASC").Find(&bookmarks)
+			// print the bookmarks
+			printBookmarks(bookmarks)
+		}
+
+		os.Exit(0)
 	}
 
-	originalBookmarks, err := unmarshalJSON(data)
-	if err != nil {
-		fmt.Println("Error parsing JSON:", err)
-		return
-	}
+	// if upsert flag is set, upsert bookmarks
+	if *upsertFlag {
+		db.AutoMigrate(&ConvertedBookmark{})
 
-	ConvertedBookmarks, err := convertBookmarks(originalBookmarks)
-	upsertBookmarks(db, ConvertedBookmarks)
-	if err != nil {
-		fmt.Println("Error converting bookmarks:", err)
-		return
-	}
+		data, err := readJSONFile()
+		if err != nil {
+			fmt.Println("Error reading file:", err)
+			return
+		}
 
-	total := len(ConvertedBookmarks)
-	fmt.Printf("Total bookmarks: %d\n", total)
-	if verbose {
-		printConvertedBookmarks(ConvertedBookmarks)
+		originalBookmarks, err := unmarshalJSON(data)
+		if err != nil {
+			fmt.Println("Error parsing JSON:", err)
+			return
+		}
+
+		ConvertedBookmarks, err := convertBookmarks(originalBookmarks)
+		upsertBookmarks(db, ConvertedBookmarks)
+		if err != nil {
+			fmt.Println("Error converting bookmarks:", err)
+			return
+		}
+
+		total := len(ConvertedBookmarks)
+		fmt.Printf("Total bookmarks: %d\n", total)
+		if *verboseFlag {
+			printConvertedBookmarks(ConvertedBookmarks)
+		}
 	}
 }
