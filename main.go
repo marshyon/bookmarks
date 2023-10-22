@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/marshyon/pinboard-bookmarks/api"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -33,6 +34,11 @@ type OriginalBookmark struct {
 	Shared      string `json:"shared"`
 	ToRead      string `json:"toread"`
 	Tags        string `json:"tags"`
+}
+
+type ReadBookmarks struct {
+	Hash string `json:"hash" gorm:"unique"`
+	Done int    `json:"done"`
 }
 
 // Define a struct with a time.Time field for the converted bookmarks
@@ -133,8 +139,16 @@ func upsertBookmarks(db *gorm.DB, convertedBookmarks []ConvertedBookmark) error 
 }
 
 // print out the converted bookmarks
-func printConvertedBookmarks(convertedBookmarks []ConvertedBookmark) {
+func printConvertedBookmarks(convertedBookmarks []ConvertedBookmark, db *gorm.DB) {
 	for _, bookmark := range convertedBookmarks {
+
+		// check if there is already a hash in ReadBookmarks
+		// if there is, then skip
+		if err := db.Where("hash = ?", bookmark.Hash).First(&ReadBookmarks{}).Error; err != nil {
+			fmt.Println("Error reading bookmark:", err)
+			return
+		}
+
 		fmt.Printf("Href: %s\n", bookmark.Href)
 		fmt.Printf("Description: %s\n", bookmark.Description)
 		fmt.Printf("Extended: %s\n", bookmark.Extended)
@@ -148,18 +162,53 @@ func printConvertedBookmarks(convertedBookmarks []ConvertedBookmark) {
 	}
 }
 
-func printBookmarks(bookmarks []ConvertedBookmark) {
+func storeTaggedBookmarks(bookmarks []ConvertedBookmark, tag string) {
+
+	// if there is already a tag matching the tag, then skip
+	tagCount, err := api.QueryTag(tag)
+	if err != nil {
+		fmt.Println("Error querying tag:", err)
+		return
+	}
+	fmt.Printf("Tag count: %d\n", tagCount)
+	if tagCount == 0 {
+		fmt.Println("No bookmarks found for tag:", tag)
+	} else {
+		fmt.Printf("%d Bookmarks found for tag: %s\n", tagCount, tag)
+		return
+	}
+
+	// there are no bookmarks for the tag yet,
+	// so create new ones in linkding for each one
 	for _, bookmark := range bookmarks {
 		fmt.Printf("URL: %s\n", bookmark.Href)
 		fmt.Printf("Desc: %s\n", bookmark.Description)
 		fmt.Printf("Extended: %s\n", bookmark.Extended)
+
+		newNotes := fmt.Sprintf("%s\n\n%s", bookmark.Hash, bookmark.Extended)
+
 		fmt.Printf("Tags: %s\n", bookmark.Tags)
 		fmt.Printf("Hash: %s\n", bookmark.Hash)
 
 		dateString := bookmark.Time.Format("2006-01-02")
-
+		newDescription := fmt.Sprintf("[%s] %s", dateString, bookmark.Description)
 		fmt.Printf("Date: %s\n", dateString)
+
+		// create a linkding bookmark
+		linkdingBookmark := api.LinkdingBookmark{
+			URL:         bookmark.Href,
+			Title:       bookmark.Description,
+			Description: newDescription,
+			Notes:       newNotes,
+			IsArchived:  false,
+			Unread:      true,
+			Shared:      false,
+			TagNames:    []string{tag},
+		}
+		fmt.Printf("Linkding bookmark: %#v\n", linkdingBookmark)
+		api.CreateBookmark(linkdingBookmark)
 		fmt.Println("---------------------------------------------")
+
 	}
 }
 
@@ -190,10 +239,8 @@ func main() {
 		for _, queryValue := range queryValues {
 
 			// query the database for bookmarks that match the query values
-			// db.Where("tags LIKE ?", "%"+queryValue+"%").Find(&bookmarks)
 			db.Where("tags LIKE ?", "%"+queryValue+"%").Order("time ASC").Find(&bookmarks)
-			// print the bookmarks
-			printBookmarks(bookmarks)
+			storeTaggedBookmarks(bookmarks, queryValue)
 		}
 
 		os.Exit(0)
@@ -225,7 +272,7 @@ func main() {
 		total := len(ConvertedBookmarks)
 		fmt.Printf("Total bookmarks: %d\n", total)
 		if *verboseFlag {
-			printConvertedBookmarks(ConvertedBookmarks)
+			printConvertedBookmarks(ConvertedBookmarks, db)
 		}
 	}
 }

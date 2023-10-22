@@ -3,6 +3,7 @@ module github.com/marshyon/pinboard-bookmarks
 go 1.20
 
 require (
+	github.com/joho/godotenv v1.5.1
 	gorm.io/driver/sqlite v1.5.3
 	gorm.io/gorm v1.25.2-0.20230530020048-26663ab9bf55
 )
